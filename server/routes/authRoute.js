@@ -12,6 +12,10 @@ const {
   unBlockUser,
   handleRefreshToken,
   logout,
+  updatePassword,
+  forgotPasswordToken,
+  resetPassword
+
 } = require("../controllers/userCtrl");
 const router = express.Router();
 
@@ -37,5 +41,14 @@ router.put("/edit-user", authMiddleware, updateUser);
 //Block user and Unblock
 router.put("/block-user/:id", authMiddleware, isAdmin, blockUser);
 router.put("/unblock-user/:id", authMiddleware, isAdmin, unBlockUser);
+
+//Update password
+router.put("/password", authMiddleware, updatePassword);
+
+//Update password
+router.post("/forgot-password-token",forgotPasswordToken);
+
+//Reset Password
+router.put("/reset-password/:token",resetPassword);
 
 module.exports = router;
