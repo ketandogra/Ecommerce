@@ -16,10 +16,10 @@ const createUser = asyncHandler(async (req, res) => {
     //Create a new User
 
     const newUser = new User({
-      ...req.body
-    })
+      ...req.body,
+    });
 
-    await newUser.save()
+    await newUser.save();
 
     res.status(201).json(newUser);
   } else {
@@ -32,12 +32,10 @@ const createUser = asyncHandler(async (req, res) => {
 const loginUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-
-
   //check if user exists or not
   const findUser = await User.findOne({ email });
 
-  if (findUser && await findUser.isPasswordMatched(password) ) {
+  if (findUser && (await findUser.isPasswordMatched(password))) {
     const refreshToken = generateRefreshToken(findUser?._id);
     const updateUser = await User.findByIdAndUpdate(
       findUser?._id,
@@ -218,14 +216,14 @@ const unBlockUser = asyncHandler(async (req, res) => {
 //Update Password
 const updatePassword = asyncHandler(async (req, res) => {
   const { _id } = req.user;
-  const {password} = req.body;
+  const { password } = req.body;
   validateMongoDbId(_id);
   try {
     const user = await User.findById(_id);
 
     if (password) {
       user.password = password;
-      
+
       const updatedPassword = await user.save();
       res.status(200).json(updatedPassword);
     } else {
@@ -237,61 +235,56 @@ const updatePassword = asyncHandler(async (req, res) => {
 });
 
 //forgot password
-const forgotPasswordToken = asyncHandler(async(req,res)=>{
-  const {email} = req.body;
-  const user = await User.findOne({email})
-  if(!user) throw new Error ('User not found with this email')
+const forgotPasswordToken = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+  const user = await User.findOne({ email });
+  if (!user) throw new Error("User not found with this email");
 
-  try{
-    const token = await user.createPasswordResetToken()
-    await user.save()
-    const resetURL = `Hi, Please follow this link to reset Your Password. This link is valid till 10 minutes from now. <a href='http://localhost:8000/api/user/reset-password/${token}'> Click here</a>`
-
+  try {
+    const token = await user.createPasswordResetToken();
+    await user.save();
+    const resetURL = `Hi, Please follow this link to reset Your Password. This link is valid till 10 minutes from now. <a href='http://localhost:8000/api/user/reset-password/${token}'> Click here</a>`;
 
     const data = {
-      to:email,
+      to: email,
       text: "Hi User",
       subject: "Forgot Password Link",
-      html: resetURL
+      html: resetURL,
+    };
+    sendEmail(data);
 
-    }
-    sendEmail(data)
-
-    res.json(token)
-
-  }catch(error){
+    res.json(token);
+  } catch (error) {
     throw new Error(error);
   }
-
-
-})
+});
 
 // Reset Password
 
-const resetPassword = asyncHandler(async(req,res)=>{
-  const {password} = req.body;
-  const {token} = req.params;
+const resetPassword = asyncHandler(async (req, res) => {
+  const { password } = req.body;
+  const { token } = req.params;
   const hashedToken = crypto.SHA256(token).toString(crypto.enc.Hex);
-  try{
+  try {
+    const user = await User.findOne({
+      passwordResetToken: hashedToken,
+      passwordResetExpire: { $gt: Date.now() },
+    });
 
-    const user = await User.findOne({passwordResetToken:hashedToken, passwordResetExpire: {$gt: Date.now()}})
-
-    if(!user) throw new Error("Token Expired, Please try again later");
+    if (!user) throw new Error("Token Expired, Please try again later");
 
     user.password = password;
     user.passwordResetToken = undefined;
     user.passwordResetExpire = undefined;
     await user.save();
     res.status(200).json({
-      message:"Password reset successfully",
-      user
-    })
-
-  }catch(error){
-
+      message: "Password reset successfully",
+      user,
+    });
+  } catch (error) {
+    throw new Error(error);
   }
-})
-
+});
 
 module.exports = {
   createUser,
@@ -306,5 +299,5 @@ module.exports = {
   logout,
   updatePassword,
   forgotPasswordToken,
-  resetPassword
+  resetPassword,
 };
