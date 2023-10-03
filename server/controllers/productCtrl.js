@@ -3,7 +3,9 @@ const Product = require("../models/productModel");
 const User = require("../models/userModel");
 const asyncHandler = require("express-async-handler");
 const slugify = require("slugify");
-const { json } = require("body-parser");
+const cloudinaryUploading = require('../utils/cloudinary')
+const validateMongoDbId = require("../utils/validateMongodbId");
+const cloudinaryUploadingImg = require("../utils/cloudinary");
 
 //Create new product
 const createProduct = asyncHandler(async (req, res) => {
@@ -127,7 +129,6 @@ const addToWishlist = asyncHandler(async (req, res) => {
     }
 
     const alreadyAdded = user.wishlist.includes(prodId);
-  
 
     if (alreadyAdded) {
       user = await User.findByIdAndUpdate(
@@ -155,14 +156,16 @@ const addToWishlist = asyncHandler(async (req, res) => {
 // Rating
 const rating = asyncHandler(async (req, res) => {
   const { _id } = req.user;
-  const { star, prodId,comment} = req.body;
+  const { star, prodId, comment } = req.body;
 
   try {
     // Find the product by its ID
     let product = await Product.findById(prodId);
 
     // Check if the user has already rated the product
-    const alreadyRated = product.ratings.find((userId) => userId.postedBy.toString() === _id.toString());
+    const alreadyRated = product.ratings.find(
+      (userId) => userId.postedBy.toString() === _id.toString()
+    );
 
     if (alreadyRated) {
       // Corrected the update query to update the existing rating
@@ -171,44 +174,90 @@ const rating = asyncHandler(async (req, res) => {
           "ratings._id": alreadyRated._id, // Match by rating's _id
         },
         {
-          $set: { "ratings.$.star": star, "ratings.$.comment":comment },
+          $set: { "ratings.$.star": star, "ratings.$.comment": comment },
         },
         { new: true }
       );
-
     } else {
       // If the user hasn't rated the product, add a new rating
       const rateProduct = await Product.findByIdAndUpdate(
         prodId,
         {
           $push: {
-            ratings: { star: star,comment:comment,postedBy: _id },
+            ratings: { star: star, comment: comment, postedBy: _id },
           },
         },
         { new: true }
       );
-
-  
     }
 
     // Calculate the total rating for the product
     const getAllratings = await Product.findById(prodId);
     let totalRatingNumber = getAllratings.ratings.length;
-    let sumRating = getAllratings.ratings.map((item) => item.star).reduce((totalRating, rating) => totalRating + rating, 0);
+    let sumRating = getAllratings.ratings
+      .map((item) => item.star)
+      .reduce((totalRating, rating) => totalRating + rating, 0);
     let averageRating = Math.round(sumRating / totalRatingNumber);
 
     // Update the product with the calculated average rating
-    product = await Product.findByIdAndUpdate(prodId, { totalRating: averageRating }, { new: true });
+    product = await Product.findByIdAndUpdate(
+      prodId,
+      { totalRating: averageRating },
+      { new: true }
+    );
 
     //Return update product
-    res.json(product)
-
+    res.json(product);
   } catch (error) {
     // Handle errors by throwing an error (you may want to handle errors differently)
     throw new Error(error);
   }
 });
 
+// Controller to upload product images
+const uploadProductImages = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+
+  // Ensure id is a valid MongoDB ObjectId
+  validateMongoDbId(id);
+
+  try {
+    const urls = [];
+    const files = req.files;
+
+    // Loop through uploaded files and upload them to Cloudinary
+    for (let file of files) {
+      const { path } = file;
+      // Upload the image to Cloudinary and store the URL
+      const newPath = await cloudinaryUploadingImg(path, "images");
+      if (newPath) {
+        urls.push(newPath);
+      }
+    }
+
+    // Update the product's images with the new URLs
+    const findProduct = await Product.findByIdAndUpdate(
+      id,
+      {
+        images: urls.map((file) => file),
+      },
+      {
+        new: true, // Return the updated product
+      }
+    );
+
+    // Handle case where the product is not found
+    if (!findProduct) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    // Send the updated product as a JSON response
+    res.json(findProduct);
+  } catch (error) {
+    console.error("Error in uploadProductImages:", error);
+    throw new Error(error);
+  }
+});
 
 module.exports = {
   createProduct,
@@ -218,4 +267,5 @@ module.exports = {
   deleteProduct,
   addToWishlist,
   rating,
+  uploadProductImages ,
 };

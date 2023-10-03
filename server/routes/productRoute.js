@@ -1,8 +1,9 @@
 const express = require("express");
-const {createProduct,getProduct,getAllProduct,updateProduct,deleteProduct,addToWishlist, rating} = require("../controllers/productCtrl")
+const {createProduct,getProduct,getAllProduct,updateProduct,deleteProduct,addToWishlist, rating,uploadProductImages} = require("../controllers/productCtrl")
 const router = express.Router()
 
-const {isAdmin,authMiddleware} = require("../middlewares/authMiddleware")
+const {isAdmin,authMiddleware} = require("../middlewares/authMiddleware");
+const { uploadPhoto, productImgResize } = require("../middlewares/uploadImages");
 
 
 // craete a new product route
@@ -24,6 +25,9 @@ router.put('/rating',authMiddleware,rating)
 
 // update product route
 router.put('/:id',authMiddleware,isAdmin,updateProduct)
+
+//upload product images
+router.put('/upload/:id',authMiddleware,isAdmin,uploadPhoto.array('images',10),productImgResize,uploadProductImages)
 
 
 // delete product route
