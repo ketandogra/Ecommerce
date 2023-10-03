@@ -1,11 +1,10 @@
-const { query } = require("express");
 const Product = require("../models/productModel");
 const User = require("../models/userModel");
 const asyncHandler = require("express-async-handler");
 const slugify = require("slugify");
-const cloudinaryUploading = require('../utils/cloudinary')
 const validateMongoDbId = require("../utils/validateMongodbId");
 const cloudinaryUploadingImg = require("../utils/cloudinary");
+const fs = require("fs")
 
 //Create new product
 const createProduct = asyncHandler(async (req, res) => {
@@ -214,32 +213,21 @@ const rating = asyncHandler(async (req, res) => {
   }
 });
 
-// Controller to upload product images
-const uploadProductImages = asyncHandler(async (req, res) => {
+
+// Controller to update product with image URLs
+const updateProductWithImageURLs  = asyncHandler(async (req, res, next) => {
   const { id } = req.params;
+  const { imageUrls } = req.body; // Array of Cloudinary image URLs passed from middleware
 
   // Ensure id is a valid MongoDB ObjectId
   validateMongoDbId(id);
 
   try {
-    const urls = [];
-    const files = req.files;
-
-    // Loop through uploaded files and upload them to Cloudinary
-    for (let file of files) {
-      const { path } = file;
-      // Upload the image to Cloudinary and store the URL
-      const newPath = await cloudinaryUploadingImg(path, "images");
-      if (newPath) {
-        urls.push(newPath);
-      }
-    }
-
-    // Update the product's images with the new URLs
-    const findProduct = await Product.findByIdAndUpdate(
+    // Find the product by its ID and update it with the image URLs
+    const updatedProduct = await Product.findByIdAndUpdate(
       id,
       {
-        images: urls.map((file) => file),
+        images: imageUrls, // Update the 'images' field with the array of image URLs
       },
       {
         new: true, // Return the updated product
@@ -247,17 +235,18 @@ const uploadProductImages = asyncHandler(async (req, res) => {
     );
 
     // Handle case where the product is not found
-    if (!findProduct) {
-      return res.status(404).json({ error: 'Product not found' });
+    if (!updatedProduct) {
+      return res.status(404).json({ error: "Product not found" });
     }
 
     // Send the updated product as a JSON response
-    res.json(findProduct);
+    res.json(updatedProduct);
   } catch (error) {
-    console.error("Error in uploadProductImages:", error);
-    throw new Error(error);
+    console.error("Error in updateProductWithImageURLs:", error);
+    next(error); // Pass the error to the error-handling middleware
   }
 });
+
 
 module.exports = {
   createProduct,
@@ -267,5 +256,5 @@ module.exports = {
   deleteProduct,
   addToWishlist,
   rating,
-  uploadProductImages ,
+  updateProductWithImageURLs ,
 };

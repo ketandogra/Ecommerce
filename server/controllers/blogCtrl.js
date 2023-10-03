@@ -2,6 +2,8 @@ const Blog = require("../models/blogModel");
 const user = require("../models/userModel");
 const asyncHandler = require("express-async-handler");
 const validateMongoDbId = require("../utils/validateMongodbId");
+const cloudinaryUploadingImg = require("../utils/cloudinary");
+const fs = require("fs");
 
 //Create Blog
 const createBlog = asyncHandler(async (req, res) => {
@@ -125,7 +127,7 @@ const likeBlog = asyncHandler(async (req, res) => {
   }
 });
 
-//like a blog
+//dislike a blog
 const dislikeBlog = asyncHandler(async (req, res) => {
   const blogId = req.body.blogId;
 
@@ -171,6 +173,39 @@ const dislikeBlog = asyncHandler(async (req, res) => {
   }
 });
 
+// Controller to update blog with image URLs
+const updateBlogWithImageURLs  = asyncHandler(async (req, res, next) => {
+  const { id } = req.params;
+  const { imageUrls } = req.body; // Array of Cloudinary image URLs passed from middleware
+
+  // Ensure id is a valid MongoDB ObjectId
+  validateMongoDbId(id);
+
+  try {
+    // Find the blog by its ID and update it with the image URLs
+    const updatedBlog = await Blog.findByIdAndUpdate(
+      id,
+      {
+        images: imageUrls, // Update the 'images' field with the array of image URLs
+      },
+      {
+        new: true, // Return the updated blog
+      }
+    );
+
+    // Handle case where the blog is not found
+    if (!updatedBlog) {
+      return res.status(404).json({ error: "Blog not found" });
+    }
+
+    // Send the updated blog as a JSON response
+    res.json(updatedBlog);
+  } catch (error) {
+    console.error("Error in updateBlogWithImageURLs:", error);
+    next(error); // Pass the error to the error-handling middleware
+  }
+});
+
 module.exports = {
   createBlog,
   updateBlog,
@@ -179,4 +214,5 @@ module.exports = {
   deleteBlog,
   likeBlog,
   dislikeBlog,
+  updateBlogWithImageURLs ,
 };

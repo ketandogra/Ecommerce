@@ -1,6 +1,8 @@
 const multer = require("multer");
 const sharp = require("sharp");
 const path = require("path");
+const fs = require('fs')
+const cloudinaryUploadingImg = require('../utils/cloudinary')
 
 // Define multer storage configuration
 const multerStorage = multer.diskStorage({
@@ -13,6 +15,7 @@ const multerStorage = multer.diskStorage({
     const uniqueSuffix = Date.now() + "_" + Math.round(Math.random() * 1e9);
     cb(null, file.fieldname + "-" + uniqueSuffix + ".jpeg");
   },
+
 });
 
 // Define multer file filter configuration
@@ -30,46 +33,112 @@ const multerFilter = function (req, file, cb) {
 const uploadPhoto = multer({
   storage: multerStorage,
   fileFilter: multerFilter,
-  limits: { fileSize: 5000000 }, // Limit the file size to 5MB
+  limits: { fileSize: 2000000 }, // Limit the file size to 2MB
 });
 
-// Middleware for resizing and formatting uploaded product images
-const productImgResize = async (req, res, next) => {
+// Middleware for resizing and uploading product images to Cloudinary
+const productImgResizeAndUpload = async (req, res, next) => {
   if (!req.files) return next();
 
-  // Process and resize each uploaded image
-  await Promise.all(
-    req.files.map(async (file) => {
-      await sharp(file.path)
-        .resize(400, 400)
-        .toFormat("jpeg")
-        .jpeg({ quality: 90 })
-        .toFile(`public/images/products/${file.filename}`);
-    })
-  );
+  const imageUrls = [];
 
-  // Continue to the next middleware or route handler
-  next();
+  try {
+    // Process and upload each uploaded image to Cloudinary
+    await Promise.all(
+      req.files.map(async (file) => {
+        const originalImagePath = file.path;
+
+        await sharp(originalImagePath)
+          .toFormat("jpeg")
+          .resize({
+            width: 800, // Set the maximum width
+            height: 600, // Set the maximum height
+            fit: sharp.fit.inside, // Fit the image inside the specified dimensions
+            withoutEnlargement: true, // Prevent upscaling
+          })
+          .jpeg({   quality: 80, // Adjust the JPEG quality (0-100)
+          chromaSubsampling: '4:4:4', // Preserve color quality 
+        })
+          .toFile(`public/images/blogs/${file.filename}`)
+
+        let resizePath = path.join(__dirname,'../',`public/images/blogs/${file.filename}`)
+       
+
+        const cloudinaryImgUrl = await cloudinaryUploadingImg(resizePath, "products");
+    
+        // Store the Cloudinary URL in the array
+        imageUrls.push(cloudinaryImgUrl);
+
+        // Remove both the original and resized images from the server's disk storage
+
+          fs.unlinkSync(originalImagePath)
+
+          fs.unlinkSync(`public/images/blogs/${file.filename}`)
+   
+      })
+    );
+
+    // Pass the array of Cloudinary image URLs to the next middleware or route
+    req.body.imageUrls = imageUrls;
+
+    next();
+  } catch (error) {
+    console.error("Error in blogImgResizeAndUpload:", error);
+    next(error); // Pass the error to the error-handling middleware
+  }
 };
 
-// Middleware for resizing and formatting uploaded blog images
-const blogImgResize = async (req, res, next) => {
+// Middleware for resizing and uploading blog images to Cloudinary
+const blogImgResizeAndUpload = async (req, res, next) => {
   if (!req.files) return next();
 
-  // Process and resize each uploaded image
-  await Promise.all(
-    req.files.map(async (file) => {
-      await sharp(file.path)
-        .resize(300, 300)
-        .toFormat("jpeg")
-        .jpeg({ quality: 90 })
-        .toFile(`public/images/blogs/${file.filename}`);
-    })
-  );
+  const imageUrls = [];
 
-  // Continue to the next middleware or route handler
-  next();
+  try {
+    // Process and upload each uploaded image to Cloudinary
+    await Promise.all(
+      req.files.map(async (file) => {
+        const originalImagePath = file.path;
+
+        await sharp(originalImagePath)
+          .toFormat("jpeg")
+          .resize({
+            width: 800, // Set the maximum width
+            height: 600, // Set the maximum height
+            fit: sharp.fit.inside, // Fit the image inside the specified dimensions
+            withoutEnlargement: true, // Prevent upscaling
+          })
+          .jpeg({   quality: 80, // Adjust the JPEG quality (0-100)
+          chromaSubsampling: '4:4:4', // Preserve color quality 
+        })
+          .toFile(`public/images/blogs/${file.filename}`)
+
+        let resizePath = path.join(__dirname,'../',`public/images/blogs/${file.filename}`)
+       
+
+        const cloudinaryImgUrl = await cloudinaryUploadingImg(resizePath, "blogs");
+    
+        // Store the Cloudinary URL in the array
+        imageUrls.push(cloudinaryImgUrl);
+
+        // Remove both the original and resized images from the server's disk storage
+
+          fs.unlinkSync(originalImagePath)
+
+          fs.unlinkSync(`public/images/blogs/${file.filename}`)
+   
+      })
+    );
+
+    // Pass the array of Cloudinary image URLs to the next middleware or route
+    req.body.imageUrls = imageUrls;
+
+    next();
+  } catch (error) {
+    console.error("Error in blogImgResizeAndUpload:", error);
+    next(error); // Pass the error to the error-handling middleware
+  }
 };
 
 // Export the middleware functions for use in routes or other parts of the application
-module.exports = { uploadPhoto, productImgResize, blogImgResize };
+module.exports = { uploadPhoto, productImgResizeAndUpload, blogImgResizeAndUpload };

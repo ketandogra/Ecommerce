@@ -30,9 +30,8 @@ var blogSchema = new mongoose.Schema({
         type:mongoose.Schema.Types.ObjectId,
         ref:"User"
     }],
-    image:{
-        type:String,
-        default:"https://cdn.smallseotools.com/blog-images-s3/1_blog1.jpg"
+    images:{
+        type:Array,
     },
     author:{
         type:String,
