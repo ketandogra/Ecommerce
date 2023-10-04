@@ -1,4 +1,8 @@
 const User = require("../models/userModel");
+const Address = require("../models/addressModel");
+const Product = require("../models/productModel");
+const Cart = require("../models/cartModel");
+const Coupon = require("../models/couponModel");
 const asyncHandler = require("express-async-handler");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto-js");
@@ -60,6 +64,38 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 });
 
+//Admin login
+const loginAdmin = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+  //check if Admin exists or not
+  const findAdmin = await User.findOne({ email });
+  if (findAdmin.role !== "admin") throw new Error("Not Authorized");
+
+  if (findAdmin && (await findAdmin.isPasswordMatched(password))) {
+    const refreshToken = generateRefreshToken(findAdmin?._id);
+    const updateAdmin = await User.findByIdAndUpdate(
+      findAdmin?._id,
+      { refreshToken: refreshToken },
+      { new: true }
+    );
+    // sent refresh token into cookie
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      maxAge: 72 * 60 * 60 * 1000,
+    });
+    res.json({
+      _id: findAdmin?._id,
+      firstname: findAdmin?.firstname,
+      lastname: findAdmin?.lastname,
+      email: findAdmin?.email,
+      mobile: findAdmin?.mobile,
+      token: generateToken(findAdmin?._id),
+    });
+  } else {
+    throw new Error("Invalid email or password!");
+  }
+});
+
 //handle refresh token
 const handleRefreshToken = asyncHandler(async (req, res) => {
   const cookie = req.cookies;
@@ -83,7 +119,6 @@ const handleRefreshToken = asyncHandler(async (req, res) => {
 });
 
 // logout user
-
 const logout = asyncHandler(async (req, res) => {
   const cookie = req.cookies;
   if (!cookie?.refreshToken) throw new Error("No Refresh Token in Cookies");
@@ -111,6 +146,33 @@ const logout = asyncHandler(async (req, res) => {
     throw new Error(error);
   }
 });
+
+// Create a new address for a user
+const createAddress = async (req, res) => {
+  const { _id } = req.user;
+  validateMongoDbId(_id);
+  const newAddress = req.body;
+
+  try {
+    const user = await User.findById(_id);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const address = await Address.create(newAddress);
+    console.log(address);
+    // Add the new address to the user's addresses array
+    user.address.push(address._id);
+
+    // Save the updated user document
+    await user.save();
+
+    res.status(201).json(user); // Return the updated addresses array
+  } catch (error) {
+    throw new Error(error);
+  }
+};
 
 // Get all users
 
@@ -286,6 +348,140 @@ const resetPassword = asyncHandler(async (req, res) => {
   }
 });
 
+//Get Wishlist
+const getWishlist = asyncHandler(async (req, res) => {
+  const { _id } = req.user;
+
+  try {
+    const findUser = await User.findById(_id).populate("wishlist");
+    res.json(findUser);
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+
+// User Cart Create
+const userCart = asyncHandler(async (req, res) => {
+  const { cart } = req.body;
+  const { _id } = req.user;
+  validateMongoDbId(_id);
+  try {
+    let products = [];
+    const findUser = await User.findById(_id);
+
+    //check user already have products in cart
+    const alreadExistCart = await Cart.findOne({ orderBy: findUser._id });
+    if (alreadExistCart) {
+      alreadExistCart.remove();
+    }
+
+    for (let i = 0; i < cart.length; i++) {
+      let obj = {};
+      obj.product = cart[i]._id;
+      obj.count = cart[i].count;
+      obj.color = cart[i].color;
+      let getPrice = await Product.findById(cart[i]._id).select("price").exec();
+      obj.price = getPrice.price;
+      products.push(obj);
+    }
+
+    let cartTotal = 0;
+    for (let product of products) {
+      cartTotal += product.price * product.count;
+    }
+
+    let newCart = new Cart({
+      products,
+      cartTotal,
+      orderBy: findUser?._id,
+    });
+
+    await newCart.save();
+
+    res.json(newCart);
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+
+// Get cart
+const getUserCart = asyncHandler(async (req, res) => {
+  const { _id } = req.user;
+  validateMongoDbId(_id);
+  try {
+    const cart = await Cart.findOne({ orderBy: _id }).populate(
+      "products.product",
+      "_id title price images"
+    );
+
+    if (!cart) {
+      return res.status(404).json({ message: "Cart not found" });
+    }
+
+    res.status(200).json(cart);
+  } catch (error) {
+    throw new Error(error);
+  }
+});
+
+// Empty Cart Functionality
+const emptyUserCart = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  validateMongoDbId(userId);
+  try {
+    const cart = await Cart.findOneAndRemove({ orderBy: userId });
+
+    if (!cart) {
+      return res.status(404).json({ message: "Cart not found" });
+    }
+
+    res.status(200).json({ message: "Cart emptied successfully", cart });
+  } catch (error) {
+    // Respond with an error message.
+    throw new Error(error);
+  }
+});
+
+// Coupon Apply
+const applyCoupon = asyncHandler(async (req, res) => {
+  const { coupon } = req.body;
+  const { _id } = req.user;
+
+  try {
+    // Check if the coupon exists in the database
+    const validCoupon = await Coupon.findOne({ name: coupon });
+
+    if (!validCoupon) {
+      return res.status(404).json({ message: "Invalid Coupon" });
+    }
+
+    // Find the user's cart
+    const user = await User.findOne({ _id });
+    const cart = await Cart.findOne({ orderBy: user._id });
+
+    // Calculate the total after applying the coupon discount
+    const totalAfterDiscount = (
+      cart.cartTotal - (cart.cartTotal * validCoupon.discount) / 100
+    ).toFixed(2);
+
+    // Update the cart with the new totalAfterDiscount
+    const updatedCart = await Cart.findOneAndUpdate(
+      { orderBy: user._id },
+      { totalAfterDiscount },
+      { new: true }
+    );
+
+    // Respond with a success message and the updated cart information
+    res
+      .status(200)
+      .json({ message: "Coupon applied successfully", cartTotalAfterDiscount:updatedCart.totalAfterDiscount});
+  } catch (error) {
+    // Handle unexpected errors and respond with an error message
+    throw new Error(error)
+  }
+});
+
+
 module.exports = {
   createUser,
   loginUser,
@@ -300,4 +496,11 @@ module.exports = {
   updatePassword,
   forgotPasswordToken,
   resetPassword,
+  loginAdmin,
+  getWishlist,
+  createAddress,
+  userCart,
+  getUserCart,
+  emptyUserCart,
+  applyCoupon,
 };
