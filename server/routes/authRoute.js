@@ -21,7 +21,8 @@ const {
   userCart,
   getUserCart,
   emptyUserCart,
-  applyCoupon
+  applyCoupon,
+  createOrder
 
 } = require("../controllers/userCtrl");
 const router = express.Router();
@@ -40,6 +41,9 @@ router.post("/cart",authMiddleware,userCart)
 
 // apply coupon
 router.post("/apply-coupon",authMiddleware, applyCoupon);
+
+//craete order
+router.post("/cart/create-order",authMiddleware,createOrder)
 
 // Get requests - refresh token
 router.get("/refresh", handleRefreshToken);
