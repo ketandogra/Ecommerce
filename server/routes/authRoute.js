@@ -22,7 +22,9 @@ const {
   getUserCart,
   emptyUserCart,
   applyCoupon,
-  createOrder
+  createOrder,
+  getOrders,
+  updateOrderStatus
 
 } = require("../controllers/userCtrl");
 const router = express.Router();
@@ -43,14 +45,18 @@ router.post("/cart",authMiddleware,userCart)
 router.post("/apply-coupon",authMiddleware, applyCoupon);
 
 //craete order
-router.post("/cart/create-order",authMiddleware,createOrder)
+router.post("/cart/cash-order",authMiddleware,createOrder)
 
 // Get requests - refresh token
 router.get("/refresh", handleRefreshToken);
 //logout user
 router.get("/logout", logout);
+
 // get all user
 router.get("/all-users", getAllUsers);
+
+// get user orders
+router.get("/get-orders",authMiddleware,getOrders);
 
 // get Cart
 router.get("/cart",authMiddleware, getUserCart);
@@ -88,5 +94,8 @@ router.post("/forgot-password-token",forgotPasswordToken);
 
 //Reset Password
 router.put("/reset-password/:token",resetPassword);
+
+// Update order status
+router.put("/update-order/:id",authMiddleware,isAdmin,updateOrderStatus)
 
 module.exports = router;
